@@ -1,0 +1,41 @@
+server_name: "__MATRIX_SERVER_NAME__"
+public_baseurl: "__MATRIX_PUBLIC_BASEURL__/"
+
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+database:
+  name: psycopg2
+  allow_unsafe_locale: __SYNAPSE_ALLOW_UNSAFE_LOCALE__
+  args:
+    user: __POSTGRES_USER__
+    password: __POSTGRES_PASSWORD__
+    database: __POSTGRES_DB__
+    host: postgres
+    cp_min: 5
+    cp_max: 10
+
+log_config: "/data/__MATRIX_SERVER_NAME__.log.config"
+media_store_path: /data/media_store
+registration_shared_secret: "__SYNAPSE_REGISTRATION_SHARED_SECRET__"
+report_stats: __SYNAPSE_REPORT_STATS__
+macaroon_secret_key: "__MACAROON_SECRET_KEY__"
+form_secret: "__FORM_SECRET__"
+signing_key_path: "/data/__MATRIX_SERVER_NAME__.signing.key"
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+# Security defaults
+enable_registration: false
+enable_registration_without_verification: false
+allow_guest_access: false
+
+# Federation defaults to disabled; override in env for public interoperability
+federation_enabled: __MATRIX_FEDERATION_ENABLED__

@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "assistant"
+version = "0.1.0"
+description = "Assistant runtime powered by Beacon and Keel"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Beacon Contributors"}]
+keywords = ["assistant", "llm", "beacon", "keel", "event-driven"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "beacon @ git+https://github.com/nanacnote/beacon.git@main",
+    "keel @ git+https://github.com/nanacnote/keel.git@main",
+    "python-dotenv>=1.0",
+    "pydantic>=2.0",
+    "psycopg[binary]>=3.2",
+    "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2.0",
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+assistant = "assistant.main:main"
+
+[project.urls]
+Homepage = "https://github.com/nanacnote/assistant"
+Repository = "https://github.com/nanacnote/assistant"
+"Bug Tracker" = "https://github.com/nanacnote/assistant/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["assistant"]
+
+[tool.hatch.envs.default]
+path = ".venv"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

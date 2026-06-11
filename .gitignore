@@ -1,0 +1,28 @@
+.venv/
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+*/_version.py
+
+# Local environment files
+matrix/.env
+
+# Matrix runtime artifacts
+matrix/runtime/nginx/*
+matrix/runtime/element/*
+matrix/runtime/assistant.env
+!matrix/runtime/.gitkeep
+
+# Synapse generated data and secrets
+matrix/data/synapse/*
+
+# Postgres data directory
+matrix/data/postgres/*
+
+# Certbot material for local/dev runs
+matrix/certs/*
+matrix/webroot/*

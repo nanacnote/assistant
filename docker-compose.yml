@@ -1,0 +1,180 @@
+name: assistant-stack
+
+services:
+  matrix-init:
+    image: matrixdotorg/synapse:latest
+    restart: "no"
+    env_file:
+      - ./matrix/.env
+    entrypoint: ["/bin/sh", "/scripts/init-config.sh"]
+    volumes:
+      - ./matrix/data/synapse:/data
+      - ./matrix/runtime/nginx:/runtime/nginx
+      - ./matrix/runtime/element:/runtime/element
+      - ./matrix/config/synapse/homeserver.yaml.template:/templates/homeserver.yaml.template:ro
+      - ./matrix/config/nginx/matrix.conf.template:/templates/matrix.conf.template:ro
+      - ./matrix/config/element/config.json.template:/templates/element.config.json.template:ro
+      - ./matrix/scripts/init-config.sh:/scripts/init-config.sh:ro
+
+  matrix-certs-bootstrap:
+    image: certbot/certbot:latest
+    restart: "no"
+    env_file:
+      - ./matrix/.env
+    entrypoint: ["/bin/sh", "/scripts/bootstrap-certs.sh"]
+    volumes:
+      - ./matrix/certs:/certs
+      - ./matrix/scripts/bootstrap-certs.sh:/scripts/bootstrap-certs.sh:ro
+      - ./matrix/scripts/common-certs.sh:/scripts/common-certs.sh:ro
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./matrix/.env
+    volumes:
+      - ./matrix/data/postgres:/var/lib/postgresql/data
+      - ./matrix/config/postgres/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-synapse} -d $${POSTGRES_DB:-synapse}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    restart: unless-stopped
+    depends_on:
+      matrix-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./matrix/data/synapse:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8008/_matrix/client/versions', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      matrix-init:
+        condition: service_completed_successfully
+      matrix-certs-bootstrap:
+        condition: service_completed_successfully
+      synapse:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./matrix/runtime/nginx/matrix.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./matrix/runtime/nginx/client-well-known.json:/usr/share/nginx/html/.well-known/matrix/client:ro
+      - ./matrix/runtime/nginx/server-well-known.json:/usr/share/nginx/html/.well-known/matrix/server:ro
+      - ./matrix/certs/fullchain.pem:/etc/nginx/certs/fullchain.pem:ro
+      - ./matrix/certs/privkey.pem:/etc/nginx/certs/privkey.pem:ro
+      - ./matrix/webroot:/var/www/certbot
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/.well-known/matrix/client"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  matrix-certs:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    depends_on:
+      nginx:
+        condition: service_healthy
+      matrix-certs-bootstrap:
+        condition: service_completed_successfully
+    env_file:
+      - ./matrix/.env
+    entrypoint: ["/bin/sh", "/scripts/init-certs.sh"]
+    volumes:
+      - ./matrix/certs:/certs
+      - ./matrix/webroot:/var/www/certbot
+      - ./matrix/scripts/init-certs.sh:/scripts/init-certs.sh:ro
+      - ./matrix/scripts/common-certs.sh:/scripts/common-certs.sh:ro
+
+  element-web:
+    image: vectorim/element-web:latest
+    restart: unless-stopped
+    depends_on:
+      matrix-init:
+        condition: service_completed_successfully
+      nginx:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    volumes:
+      - ./matrix/runtime/element/config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/config.json"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  matrix-users:
+    image: matrixdotorg/synapse:latest
+    restart: "no"
+    env_file:
+      - ./matrix/.env
+    depends_on:
+      synapse:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/register-users.sh"]
+    volumes:
+      - ./matrix/data/synapse:/data
+      - ./matrix/runtime:/runtime
+      - ./matrix/scripts/register-users.sh:/scripts/register-users.sh:ro
+
+  assistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      matrix-users:
+        condition: service_completed_successfully
+    env_file:
+      - ./.env
+      - ./matrix/.env
+    environment:
+      ASSISTANT_MATRIX_HOMESERVER_URL: http://synapse:8008
+      ASSISTANT_MATRIX_ACCESS_TOKEN: ""
+      ASSISTANT_DB_DSN: postgresql://${POSTGRES_USER:-synapse}:${POSTGRES_PASSWORD}@postgres:5432/${ASSISTANT_TOOLS_DB:-assistant_tools}
+    command:
+      [
+        "sh",
+        "-c",
+        "export ASSISTANT_MATRIX_USER_ID=@${MATRIX_ASSISTANT_LOCALPART:-assistant}:${MATRIX_SERVER_NAME:-matrix.example.com}; export ASSISTANT_MATRIX_PASSWORD=${MATRIX_ASSISTANT_PASSWORD}; export ASSISTANT_MATRIX_DEVICE_ID=${MATRIX_ASSISTANT_DEVICE_ID:-assistant}; assistant",
+      ]

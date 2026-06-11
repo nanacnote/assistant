@@ -1,0 +1,16 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "__MATRIX_CLIENT_BASEURL__",
+      "server_name": "__MATRIX_SERVER_NAME__"
+    },
+    "m.identity_server": {
+      "base_url": "https://vector.im"
+    }
+  },
+  "disable_custom_urls": false,
+  "disable_guests": true,
+  "brand": "Assistant Dev Matrix",
+  "show_labs_settings": true,
+  "default_theme": "light"
+}
